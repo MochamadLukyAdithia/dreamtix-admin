@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:dreamtix_admin/features/home/model/EventModel.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
+import 'package:dreamtix_admin/core/constant/apiUrl.dart' as api;
 
 class Homecontroller extends GetxController {
   final events = <EventModel>[].obs;
@@ -12,9 +13,7 @@ class Homecontroller extends GetxController {
   Future<void> fetchEvents() async {
     isLoading.value = true;
     try {
-      final response = await http.get(
-        Uri.parse('http://10.0.2.2:3000/api/events'),
-      );
+      final response = await http.get(Uri.parse('${api.apiUrl}/events'));
 
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
@@ -46,7 +45,7 @@ class Homecontroller extends GetxController {
       });
 
       final response = await http.post(
-        Uri.parse("http://10.0.2.2:3000/api/events"),
+        Uri.parse("${api.apiUrl}/events"),
         headers: {"Content-Type": "application/json"},
         body: body,
       );

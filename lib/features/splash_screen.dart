@@ -1,4 +1,3 @@
-
 import 'package:dreamtix_admin/features/routes/route.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -19,10 +18,7 @@ class SplashScreen extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Image.asset(
-              './assets/images/logo.png',
-              height: 200,
-            ),
+            Image.asset('./assets/images/logo.png', height: 200),
             const SizedBox(height: 20),
             const Text(
               'DreamTix',

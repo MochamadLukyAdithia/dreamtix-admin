@@ -1,10 +1,6 @@
-import 'package:dreamtix_admin/features/event/view/tambah_event.dart';
-import 'package:dreamtix_admin/features/home/controller/HomeController.dart';
-import 'package:dreamtix_admin/features/home/model/EventModel.dart';
+import 'package:dreamtix_admin/features/transaksi/controller/TransaksiController.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:get/get.dart';
-import 'package:dreamtix_admin/core/helper/date.dart' as date;
+import 'package:dreamtix_admin/features/transaksi/model/transaksi_model.dart';
 
 class EventListScreen extends StatefulWidget {
   const EventListScreen({super.key});
@@ -13,36 +9,139 @@ class EventListScreen extends StatefulWidget {
   _EventListScreenState createState() => _EventListScreenState();
 }
 
-class _EventListScreenState extends State<EventListScreen>
-    with TickerProviderStateMixin {
-  late AnimationController _animationController;
-  final TextEditingController _searchController = TextEditingController();
-  final Homecontroller controller = Get.put(Homecontroller());
-
-  String _searchQuery = '';
+class _EventListScreenState extends State<EventListScreen> {
+  TransactionResponse? _transactionData;
+  bool _isLoading = true;
+  String _selectedPeriod = 'Semua';
 
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    )..forward();
+    _loadTransactionData();
   }
 
-  @override
-  void dispose() {
-    _animationController.dispose();
-    _searchController.dispose();
-    super.dispose();
+  Future<void> _loadTransactionData() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final data = await TransactionController.getAllTransactions();
+      setState(() {
+        _transactionData = data;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      print('Error loading transaction data: $e');
+    }
   }
 
-  List<EventModel> get filteredEvents {
-    final allEvents = controller.events;
-    if (_searchQuery.isEmpty) return allEvents;
-    return allEvents.where((event) {
-      return event.namaEvent.toLowerCase().contains(_searchQuery.toLowerCase());
-    }).toList();
+  // Calculate analytics from transaction data
+  Map<String, dynamic> _calculateAnalytics() {
+    if (_transactionData == null || _transactionData!.data.isEmpty) {
+      return {
+        'totalRevenue': 0,
+        'totalTransactions': 0,
+        'totalTickets': 0,
+        'completedTransactions': 0,
+        'pendingTransactions': 0,
+        'cancelledTransactions': 0,
+        'averageOrderValue': 0,
+        'topEvents': <Map<String, dynamic>>[],
+        'revenueByStatus': <String, int>{},
+        'ticketsByCategory': <String, int>{},
+      };
+    }
+
+    int totalRevenue = 0;
+    int totalTransactions = 0;
+    int totalTickets = 0;
+    int completedTransactions = 0;
+    int pendingTransactions = 0;
+    int cancelledTransactions = 0;
+
+    Map<String, int> eventRevenue = {};
+    Map<String, int> eventTickets = {};
+    Map<String, int> revenueByStatus = {};
+    Map<String, int> ticketsByCategory = {};
+
+    for (var userData in _transactionData!.data) {
+      for (var pemesanan in userData.pemesanans) {
+        totalTransactions++;
+
+        // Calculate tickets and revenue from detail pemesanan
+        for (var detail in pemesanan.detailPemesanan) {
+          totalTickets += detail.quantity;
+          totalRevenue += detail.total;
+
+          String eventName = detail.tiket.event.namaEvent;
+          String categoryName = detail.tiket.category.nama;
+
+          // Track revenue by event
+          eventRevenue[eventName] =
+              (eventRevenue[eventName] ?? 0) + detail.total;
+          eventTickets[eventName] =
+              (eventTickets[eventName] ?? 0) + detail.quantity;
+
+          // Track tickets by category
+          ticketsByCategory[categoryName] =
+              (ticketsByCategory[categoryName] ?? 0) + detail.quantity;
+        }
+
+        // Count transactions by status
+        for (var transaksi in pemesanan.transaksis) {
+          String status = transaksi.status.toUpperCase();
+
+          int orderTotal = pemesanan.detailPemesanan.fold(
+            0,
+            (sum, detail) => sum + detail.total,
+          );
+          revenueByStatus[status] = (revenueByStatus[status] ?? 0) + orderTotal;
+
+          switch (status) {
+            case 'LUNAS':
+              completedTransactions++;
+              break;
+            case 'PENDING':
+              pendingTransactions++;
+              break;
+            case 'DIBATALKAN':
+              cancelledTransactions++;
+              break;
+          }
+        }
+      }
+    }
+
+    // Create top events list
+    List<Map<String, dynamic>> topEvents = eventRevenue.entries
+        .map(
+          (entry) => {
+            'name': entry.key,
+            'revenue': entry.value,
+            'tickets': eventTickets[entry.key] ?? 0,
+          },
+        )
+        .toList();
+
+    topEvents.sort((a, b) => b['revenue'].compareTo(a['revenue']));
+    topEvents = topEvents.take(5).toList();
+
+    double averageOrderValue = totalTransactions > 0
+        ? totalRevenue / totalTransactions
+        : 0;
+
+    return {
+      'totalRevenue': totalRevenue,
+      'totalTransactions': totalTransactions,
+      'totalTickets': totalTickets,
+      'completedTransactions': completedTransactions,
+      'pendingTransactions': pendingTransactions,
+      'cancelledTransactions': cancelledTransactions,
+      'averageOrderValue': averageOrderValue,
+      'topEvents': topEvents,
+      'revenueByStatus': revenueByStatus,
+      'ticketsByCategory': ticketsByCategory,
+    };
   }
 
   @override
@@ -50,60 +149,171 @@ class _EventListScreenState extends State<EventListScreen>
     return Scaffold(
       backgroundColor: const Color(0xFF0A0E27),
       body: SafeArea(
-        child: Obx(() {
-          if (controller.isLoading.value) {
-            return const Center(
-              child: CircularProgressIndicator(color: Colors.blue),
-            );
-          }
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator(color: Colors.blue))
+            : RefreshIndicator(
+                onRefresh: _loadTransactionData,
+                color: Colors.blue,
+                backgroundColor: const Color(0xFF1A1F3A),
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildHeader(),
+                      const SizedBox(height: 20),
 
-          return Column(
-            children: [
-              _buildHeader(),
-              _buildSearchBar(),
-              Expanded(child: _buildEventList()),
-            ],
-          );
-        }),
+                      _buildAnalyticsCards(),
+                      const SizedBox(height: 20),
+                      _buildRevenueChart(),
+                      const SizedBox(height: 20),
+                      _buildTopEvents(),
+                      const SizedBox(height: 20),
+                      _buildCategoryBreakdown(),
+                    ],
+                  ),
+                ),
+              ),
       ),
     );
   }
 
   Widget _buildHeader() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const Flexible(
-            child: Text(
-              'Daftar Event',
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Dashboard Admin',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 24,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.bold,
               ),
-              overflow: TextOverflow.ellipsis,
+            ),
+            Text(
+              'Analytics & Laporan Keuntungan',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.7),
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1F3A),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.blue.withOpacity(0.3)),
+          ),
+          child: Icon(Icons.analytics, color: Colors.blue, size: 24),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAnalyticsCards() {
+    final analytics = _calculateAnalytics();
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _buildAnalyticsCard(
+                'Total Pendapatan',
+                TransactionController.formatCurrency(analytics['totalRevenue']),
+                Icons.attach_money,
+                Colors.green,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildAnalyticsCard(
+                'Total Transaksi',
+                '${analytics['totalTransactions']}',
+                Icons.receipt_long,
+                Colors.blue,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildAnalyticsCard(
+                'Tiket Terjual',
+                '${analytics['totalTickets']}',
+                Icons.confirmation_number,
+                Colors.orange,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildAnalyticsCard(
+                'Rata² Nilai Order',
+                TransactionController.formatCurrency(
+                  analytics['averageOrderValue'].round(),
+                ),
+                Icons.trending_up,
+                Colors.purple,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAnalyticsCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1F3A),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Icon(icon, color: color, size: 20),
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Icon(Icons.arrow_upward, color: color, size: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
             ),
           ),
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.2),
-                width: 1,
-              ),
-            ),
-            child: IconButton(
-              padding: EdgeInsets.zero,
-              icon: const Icon(Icons.add, color: Colors.white, size: 20),
-              onPressed: () {
-                HapticFeedback.lightImpact();
-                _addNewEvent(context);
-              },
+          Text(
+            title,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.7),
+              fontSize: 12,
             ),
           ),
         ],
@@ -111,221 +321,297 @@ class _EventListScreenState extends State<EventListScreen>
     );
   }
 
-  Widget _buildSearchBar() {
+  Widget _buildRevenueChart() {
+    final analytics = _calculateAnalytics();
+    final revenueByStatus = analytics['revenueByStatus'] as Map<String, int>;
+
     return Container(
-      margin: const EdgeInsets.fromLTRB(20, 0, 20, 15),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFF1A1F3A),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.1), width: 1),
+        border: Border.all(color: Colors.blue.withOpacity(0.3)),
       ),
-      child: TextField(
-        controller: _searchController,
-        onChanged: (value) => setState(() => _searchQuery = value),
-        style: const TextStyle(color: Colors.white, fontSize: 16),
-        decoration: InputDecoration(
-          hintText: 'Cari event',
-          hintStyle: TextStyle(
-            color: Colors.white.withOpacity(0.5),
-            fontSize: 16,
-          ),
-          prefixIcon: Container(
-            padding: const EdgeInsets.all(12),
-            child: Icon(
-              Icons.search,
-              color: Colors.white.withOpacity(0.5),
-              size: 20,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Pendapatan Berdasarkan Status',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
             ),
           ),
-          suffixIcon: _searchQuery.isNotEmpty
-              ? IconButton(
-                  icon: Icon(
-                    Icons.clear,
-                    color: Colors.white.withOpacity(0.5),
-                    size: 20,
-                  ),
-                  onPressed: () {
-                    _searchController.clear();
-                    setState(() => _searchQuery = '');
-                  },
-                )
-              : null,
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 0,
-            vertical: 16,
-          ),
-        ),
-      ),
-    );
-  }
+          const SizedBox(height: 16),
+          ...revenueByStatus.entries.map((entry) {
+            final percentage = analytics['totalRevenue'] > 0
+                ? (entry.value / analytics['totalRevenue'] * 100)
+                : 0.0;
 
-  Widget _buildEventList() {
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      itemCount: filteredEvents.length,
-      itemBuilder: (context, index) {
-        final event = filteredEvents[index];
-        return AnimatedBuilder(
-          animation: _animationController,
-          builder: (context, child) {
-            final slideAnimation =
-                Tween<Offset>(
-                  begin: const Offset(0, 0.5),
-                  end: Offset.zero,
-                ).animate(
-                  CurvedAnimation(
-                    parent: _animationController,
-                    curve: Interval(
-                      index * 0.1,
-                      1.0,
-                      curve: Curves.easeOutCubic,
-                    ),
-                  ),
-                );
-            final fadeAnimation = Tween<double>(begin: 0, end: 1).animate(
-              CurvedAnimation(
-                parent: _animationController,
-                curve: Interval(index * 0.1, 1.0, curve: Curves.easeOut),
-              ),
+            Color statusColor = Color(
+              TransactionController.getStatusColor(entry.key),
             );
-            return SlideTransition(
-              position: slideAnimation,
-              child: FadeTransition(
-                opacity: fadeAnimation,
-                child: _buildEventCard(event),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
 
-  Widget _buildEventCard(EventModel event) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1F3A),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.1), width: 1),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () => _showEventDetails(context, event),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        event.namaEvent,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        children: [
+                          Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: statusColor,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            entry.key,
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.8),
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Tanggal: ${date.formatDate(event.waktu.toString())}',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.6),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Artis: ${event.artis}',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.6),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w400,
-                        ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            TransactionController.formatCurrency(entry.value),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            '${percentage.toStringAsFixed(1)}%',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.6),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(width: 12),
-                const Icon(Icons.chevron_right, color: Colors.white54),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showEventDetails(BuildContext context, EventModel event) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.5,
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A1F3A),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          border: Border.all(color: Colors.white.withOpacity(0.1), width: 1),
-        ),
-        child: Column(
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(top: 12),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    event.namaEvent,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Tanggal: ${date.formatDate(event.waktu.toString())}',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Artis: ${event.artis}',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
-                      fontSize: 16,
-                    ),
+                  const SizedBox(height: 4),
+                  LinearProgressIndicator(
+                    value: percentage / 100,
+                    backgroundColor: Colors.white.withOpacity(0.1),
+                    valueColor: AlwaysStoppedAnimation<Color>(statusColor),
                   ),
                 ],
               ),
-            ),
-          ],
-        ),
+            );
+          }).toList(),
+        ],
       ),
     );
   }
 
-  void _addNewEvent(BuildContext context) {
-    Get.to(() => const TambahEvent());
+  Widget _buildTopEvents() {
+    final analytics = _calculateAnalytics();
+    final topEvents = analytics['topEvents'] as List<Map<String, dynamic>>;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1F3A),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.blue.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Event Terlaris',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (topEvents.isEmpty)
+            Center(
+              child: Text(
+                'Belum ada data event',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.6),
+                  fontSize: 14,
+                ),
+              ),
+            )
+          else
+            ...topEvents.asMap().entries.map((entry) {
+              final index = entry.key;
+              final event = entry.value;
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0A0E27),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white.withOpacity(0.1)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: index == 0
+                            ? Colors.amber
+                            : index == 1
+                            ? Colors.grey[400]
+                            : index == 2
+                            ? Colors.brown
+                            : Colors.blue,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Center(
+                        child: Text(
+                          '${index + 1}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            event['name'],
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            '${event['tickets']} tiket terjual',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.6),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      TransactionController.formatCurrency(event['revenue']),
+                      style: const TextStyle(
+                        color: Colors.green,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCategoryBreakdown() {
+    final analytics = _calculateAnalytics();
+    final ticketsByCategory =
+        analytics['ticketsByCategory'] as Map<String, int>;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1F3A),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.blue.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Distribusi Tiket per Kategori',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (ticketsByCategory.isEmpty)
+            Center(
+              child: Text(
+                'Belum ada data kategori',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.6),
+                  fontSize: 14,
+                ),
+              ),
+            )
+          else
+            ...ticketsByCategory.entries.map((entry) {
+              final totalTickets = analytics['totalTickets'] as int;
+              final percentage = totalTickets > 0
+                  ? (entry.value / totalTickets * 100)
+                  : 0.0;
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        entry.key,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.8),
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        Text(
+                          '${entry.value} tiket',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '(${percentage.toStringAsFixed(1)}%)',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.6),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+        ],
+      ),
+    );
   }
 }

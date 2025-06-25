@@ -1,55 +1,58 @@
 // models/transaction_model.dart
 class TransactionResponse {
-  final List<Transaction> data;
+  final List<TransactionData> data;
 
   TransactionResponse({required this.data});
 
   factory TransactionResponse.fromJson(Map<String, dynamic> json) {
     return TransactionResponse(
       data: (json['data'] as List)
-          .map((item) => Transaction.fromJson(item))
+          .map((item) => TransactionData.fromJson(item))
           .toList(),
     );
   }
 }
 
-class Transaction {
+class TransactionData {
+  final String username;
+  final List<Pemesanan> pemesanans;
+
+  TransactionData({required this.username, required this.pemesanans});
+
+  factory TransactionData.fromJson(Map<String, dynamic> json) {
+    return TransactionData(
+      username: json['username'] ?? '',
+      pemesanans: (json['pemesanans'] as List)
+          .map((item) => Pemesanan.fromJson(item))
+          .toList(),
+    );
+  }
+}
+
+class Pemesanan {
   final int idCustomer;
   final int idPesan;
-  final DateTime tanggal;
   final List<DetailPemesanan> detailPemesanan;
-  final List<TransaksiDetail> transaksis;
+  final List<Transaksi> transaksis;
 
-  Transaction({
+  Pemesanan({
     required this.idCustomer,
     required this.idPesan,
-    required this.tanggal,
     required this.detailPemesanan,
     required this.transaksis,
   });
 
-  factory Transaction.fromJson(Map<String, dynamic> json) {
-    return Transaction(
-      idCustomer: json['id_customer'],
-      idPesan: json['id_pesan'],
-      tanggal: DateTime.parse(json['tanggal']),
+  factory Pemesanan.fromJson(Map<String, dynamic> json) {
+    return Pemesanan(
+      idCustomer: json['id_customer'] ?? 0,
+      idPesan: json['id_pesan'] ?? 0,
       detailPemesanan: (json['detailPemesanan'] as List)
           .map((item) => DetailPemesanan.fromJson(item))
           .toList(),
       transaksis: (json['transaksis'] as List)
-          .map((item) => TransaksiDetail.fromJson(item))
+          .map((item) => Transaksi.fromJson(item))
           .toList(),
     );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id_customer': idCustomer,
-      'id_pesan': idPesan,
-      'tanggal': tanggal.toIso8601String(),
-      'detailPemesanan': detailPemesanan.map((item) => item.toJson()).toList(),
-      'transaksis': transaksis.map((item) => item.toJson()).toList(),
-    };
   }
 }
 
@@ -66,18 +69,10 @@ class DetailPemesanan {
 
   factory DetailPemesanan.fromJson(Map<String, dynamic> json) {
     return DetailPemesanan(
-      quantity: json['quantity'],
-      total: json['total'],
-      tiket: Tiket.fromJson(json['tiket']),
+      quantity: json['quantity'] ?? 0,
+      total: json['total'] ?? 0,
+      tiket: Tiket.fromJson(json['tiket'] ?? {}),
     );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'quantity': quantity,
-      'total': total,
-      'tiket': tiket.toJson(),
-    };
   }
 }
 
@@ -96,20 +91,11 @@ class Tiket {
 
   factory Tiket.fromJson(Map<String, dynamic> json) {
     return Tiket(
-      idCategory: json['id_category'],
-      idTiket: json['id_tiket'],
-      category: Category.fromJson(json['category']),
-      event: Event.fromJson(json['event']),
+      idCategory: json['id_category'] ?? 0,
+      idTiket: json['id_tiket'] ?? 0,
+      category: Category.fromJson(json['category'] ?? {}),
+      event: Event.fromJson(json['event'] ?? {}),
     );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id_category': idCategory,
-      'id_tiket': idTiket,
-      'category': category.toJson(),
-      'event': event.toJson(),
-    };
   }
 }
 
@@ -117,23 +103,10 @@ class Category {
   final String nama;
   final String posisi;
 
-  Category({
-    required this.nama,
-    required this.posisi,
-  });
+  Category({required this.nama, required this.posisi});
 
   factory Category.fromJson(Map<String, dynamic> json) {
-    return Category(
-      nama: json['nama'],
-      posisi: json['posisi'],
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'nama': nama,
-      'posisi': posisi,
-    };
+    return Category(nama: json['nama'] ?? '', posisi: json['posisi'] ?? '');
   }
 }
 
@@ -142,50 +115,44 @@ class Event {
   final String image;
   final DateTime waktu;
 
-  Event({
-    required this.namaEvent,
-    required this.image,
-    required this.waktu,
-  });
+  Event({required this.namaEvent, required this.image, required this.waktu});
 
   factory Event.fromJson(Map<String, dynamic> json) {
     return Event(
-      namaEvent: json['nama_event'],
-      image: json['image'],
-      waktu: DateTime.parse(json['waktu']),
+      namaEvent: json['nama_event'] ?? '',
+      image: json['image'] ?? '',
+      waktu: DateTime.tryParse(json['waktu'] ?? '') ?? DateTime.now(),
     );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'nama_event': namaEvent,
-      'image': image,
-      'waktu': waktu.toIso8601String(),
-    };
   }
 }
 
-class TransaksiDetail {
+class Transaksi {
+  final int idTransaksi;
   final int idMetode;
   final String status;
   final MetodePembayaran metodePembayaran;
 
-  TransaksiDetail({
+  Transaksi({
+    required this.idTransaksi,
     required this.idMetode,
     required this.status,
     required this.metodePembayaran,
   });
 
-  factory TransaksiDetail.fromJson(Map<String, dynamic> json) {
-    return TransaksiDetail(
-      idMetode: json['id_metode'],
-      status: json['status'],
-      metodePembayaran: MetodePembayaran.fromJson(json['metodePembayaran']),
+  factory Transaksi.fromJson(Map<String, dynamic> json) {
+    return Transaksi(
+      idTransaksi: json['id_transaksi'] ?? 0,
+      idMetode: json['id_metode'] ?? 0,
+      status: json['status'] ?? '',
+      metodePembayaran: MetodePembayaran.fromJson(
+        json['metodePembayaran'] ?? {},
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
+      'id_transaksi': idTransaksi,
       'id_metode': idMetode,
       'status': status,
       'metodePembayaran': metodePembayaran.toJson(),
@@ -199,52 +166,10 @@ class MetodePembayaran {
   MetodePembayaran({required this.nama});
 
   factory MetodePembayaran.fromJson(Map<String, dynamic> json) {
-    return MetodePembayaran(
-      nama: json['nama'],
-    );
+    return MetodePembayaran(nama: json['nama'] ?? '');
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'nama': nama,
-    };
-  }
-}
-
-// Enum untuk status transaksi
-enum PaymentStatus {
-  lunas('LUNAS'),
-  belumLunas('BELUM LUNAS'),
-  dibatalkan('DIBATALKAN');
-
-  const PaymentStatus(this.value);
-  final String value;
-
-  static PaymentStatus fromString(String value) {
-    return PaymentStatus.values.firstWhere(
-      (status) => status.value == value,
-      orElse: () => PaymentStatus.belumLunas,
-    );
-  }
-}
-
-// Response model untuk update status
-class UpdateStatusResponse {
-  final bool success;
-  final String message;
-  final dynamic data;
-
-  UpdateStatusResponse({
-    required this.success,
-    required this.message,
-    this.data,
-  });
-
-  factory UpdateStatusResponse.fromJson(Map<String, dynamic> json) {
-    return UpdateStatusResponse(
-      success: json['success'] ?? false,
-      message: json['message'] ?? '',
-      data: json['data'],
-    );
+    return {'nama': nama};
   }
 }

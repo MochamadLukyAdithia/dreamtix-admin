@@ -7,8 +7,6 @@ import 'package:dreamtix_admin/features/transaksi/view/transaksi_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-// Ensure you have this file or adjust the import
-// Root widget to manage navigation
 class MainApp extends StatefulWidget {
   const MainApp({super.key});
 
@@ -19,7 +17,6 @@ class MainApp extends StatefulWidget {
 class _MainAppState extends State<MainApp> {
   int _selectedIndex = 0;
 
-  // List of screens for navigation
   final List<Widget> _screens = [
     EventListScreen(),
     TicketScreen(),
@@ -63,8 +60,8 @@ class _MainAppState extends State<MainApp> {
           child: Row(
             children: [
               Expanded(child: _buildNavItem(Icons.home, 'Home', 0)),
-              Expanded(child: _buildNavItem(Icons.calendar_today, 'Tiket', 1)),
-              const SizedBox(width: 60), // Space for FAB
+              Expanded(child: _buildNavItem(Icons.calendar_today, 'Event', 1)),
+              const SizedBox(width: 60),
               Expanded(child: _buildNavItem(Icons.shop, 'Transaksi', 2)),
               Expanded(child: _buildNavItem(Icons.person, 'Profile', 3)),
             ],
@@ -138,20 +135,17 @@ class _MainAppState extends State<MainApp> {
   }
 
   void _openQRScanner(BuildContext context) async {
-    // Navigate to QR Scanner Screen
     final result = await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const QRScannerScreen()),
     );
 
-    // Handle the result from QR Scanner
     if (result != null && mounted) {
       _handleQRResult(result);
     }
   }
 
   void _handleQRResult(String qrValue) {
-    // Process the QR code result here
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -218,8 +212,7 @@ class _MainAppState extends State<MainApp> {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              // Add your logic to process the QR code value
-              // For example: validate ticket, get event info, etc.
+
               _processQRCode(qrValue);
             },
             style: ElevatedButton.styleFrom(
@@ -236,14 +229,6 @@ class _MainAppState extends State<MainApp> {
   }
 
   void _processQRCode(String qrValue) {
-    // Add your QR code processing logic here
-    // Examples:
-    // - Parse event ID from QR code
-    // - Validate ticket authenticity
-    // - Check ticket status
-    // - Update ticket status
-    // - Navigate to specific screen based on QR content
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -256,7 +241,6 @@ class _MainAppState extends State<MainApp> {
           label: 'Detail',
           textColor: Colors.white,
           onPressed: () {
-            // Show detailed processing result
             _showQRProcessingResult(qrValue);
           },
         ),
@@ -265,8 +249,6 @@ class _MainAppState extends State<MainApp> {
   }
 
   void _showQRProcessingResult(String qrValue) {
-    // Show detailed processing result
-    // This could be a new screen or detailed dialog
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -305,7 +287,7 @@ class _MainAppState extends State<MainApp> {
                 ),
               ),
               const SizedBox(height: 16),
-              // Add more processing details here
+
               Text(
                 'Status: Berhasil diproses',
                 style: TextStyle(

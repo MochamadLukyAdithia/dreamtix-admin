@@ -2,18 +2,16 @@ class Event {
   final String namaEvent;
   final String artis;
   final DateTime waktu;
+  final String image;
 
-  Event({
-    required this.namaEvent,
-    required this.artis,
-    required this.waktu,
-  });
+  Event({required this.namaEvent, required this.artis, required this.waktu, required this.image});
 
   factory Event.fromJson(Map<String, dynamic> json) {
     return Event(
       namaEvent: json['nama_event'],
       artis: json['artis'],
       waktu: DateTime.parse(json['waktu']),
+      image: json['image'],
     );
   }
 }
